@@ -1,179 +1,106 @@
 "use client";
 import { useState } from 'react';
 import { auth, db } from '../lib/firebase'; 
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'; // Agregamos Google
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 
 export default function RegistroTalento() {
   const router = useRouter();
-  
-  // Estados básicos
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nombre, setNombre] = useState('');
   const [rol, setRol] = useState('Actor/Actriz');
-  const [especialidad, setEspecialidad] = useState('Cine');
-  
-  // CONTACTO Y REDES
-  const [telefono, setTelefono] = useState('');
-  const [facebook, setFacebook] = useState('');
-  const [instagram, setInstagram] = useState('');
-  const [youtube, setYoutube] = useState('');
-
-  const [experiencia, setExperiencia] = useState('');
-  const [habilidades, setHabilidades] = useState('');
-  const [categorias, setCategorias] = useState<string[]>([]);
   const [cargando, setCargando] = useState(false);
 
-  const opcionesCategorias = ["Largometrajes", "Cortometrajes", "Comerciales", "Series TV", "Documentales", "Teatro"];
+  // --- LÓGICA DE GOOGLE ---
+  const manejarGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
 
-  const manejarCheckbox = (cat: string) => {
-    setCategorias(prev => 
-      prev.includes(cat) ? prev.filter(i => i !== cat) : [...prev, cat]
-    );
+      // Verificamos si el usuario ya existe para no sobreescribir sus datos
+      const docRef = doc(db, "usuarios", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        await setDoc(docRef, {
+          uid: user.uid,
+          nombre: user.displayName,
+          email: user.email,
+          rol: "Actor/Actriz", // Rol por defecto
+          fotoPerfil: user.photoURL,
+          tipo: 'usuario_talento',
+          fechaRegistro: new Date().toISOString()
+        });
+      }
+      router.push('/dashboard');
+    } catch (error) {
+      console.error("Error con Google", error);
+    }
   };
 
   const manejarRegistro = async (e: React.FormEvent) => {
     e.preventDefault();
     setCargando(true);
-
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // Guardamos todos los datos en Firestore
-      await setDoc(doc(db, "usuarios", user.uid), {
-        uid: user.uid,
-        nombre,
-        email,
-        rol,
-        especialidad,
-        telefono, // Este campo es el que usará el botón de WhatsApp
-        redes: {
-          facebook,
-          instagram,
-          youtube
-        },
-        experiencia,
-        habilidadesArtisticas: habilidades,
-        categoriasInteres: categorias,
+      await setDoc(doc(db, "usuarios", userCredential.user.uid), {
+        uid: userCredential.user.uid,
+        nombre, email, rol,
         tipo: 'usuario_talento',
         fechaRegistro: new Date().toISOString()
       });
-
-      alert(`¡Bienvenido/a, ${nombre}! Perfil creado exitosamente.`);
       router.push('/dashboard'); 
-
-    } catch (error: any) {
-      alert("Error: " + error.message);
-    } finally {
-      setCargando(false);
-    }
+    } catch (error: any) { alert(error.message); }
+    setCargando(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 py-12 px-4">
-      <div className="max-w-3xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
+    <div className="relative min-h-screen w-full overflow-hidden flex flex-col items-center md:items-start justify-center p-4 md:pl-20">
+      <video autoPlay loop muted playsInline className="absolute z-0 w-auto min-w-full min-h-full max-w-none object-cover opacity-50">
+        <source src="/1.mp4" type="video/mp4" />
+      </video>
+
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center md:items-start">
+        <button onClick={() => router.push('/')} className="mb-4 text-indigo-400 font-black uppercase text-[9px] tracking-[0.2em] bg-black/60 p-2 rounded-lg backdrop-blur-sm">← Volver</button>
         
-        <div className="bg-indigo-700 p-8 text-white text-center">
-          <h1 className="text-3xl font-bold">Registro de Talento</h1>
-          <p className="opacity-90">Completa tu perfil profesional para ser contactado</p>
-        </div>
+        <div className="w-full bg-[#111]/90 rounded-[2rem] shadow-2xl overflow-hidden border border-white/10 backdrop-blur-xl p-6">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-black uppercase italic italic text-white leading-none">Nuevo <span className="text-indigo-500">Perfil</span></h1>
+          </div>
 
-        <form onSubmit={manejarRegistro} className="p-8 space-y-8">
-          
-          {/* SECCIÓN 1: DATOS PERSONALES */}
-          <section className="space-y-4">
-            <h2 className="text-indigo-700 font-black uppercase text-sm tracking-widest border-b pb-2">Información Básica</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="flex flex-col">
-                <label className="text-black font-bold mb-1">Nombre Completo</label>
-                <input type="text" required className="input-estilo" onChange={(e) => setNombre(e.target.value)} />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-black font-bold mb-1">Correo Electrónico</label>
-                <input type="email" required className="input-estilo" onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-black font-bold mb-1">Teléfono (Con código de país)</label>
-                <input type="tel" placeholder="Ej: 5491112345678" className="input-estilo" onChange={(e) => setTelefono(e.target.value)} />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-black font-bold mb-1">Contraseña</label>
-                <input type="password" required className="input-estilo" onChange={(e) => setPassword(e.target.value)} />
-              </div>
-            </div>
-          </section>
-
-          {/* SECCIÓN 2: ROL Y REDES SOCIALES */}
-          <section className="space-y-4">
-            <h2 className="text-indigo-700 font-black uppercase text-sm tracking-widest border-b pb-2">Perfil y Redes</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="flex flex-col">
-                <label className="text-black font-bold mb-1">¿Cuál es tu Rol?</label>
-                <select className="input-estilo font-bold" value={rol} onChange={(e) => setRol(e.target.value)}>
-                  <option>Actor/Actriz</option>
-                  <option>Guionista</option>
-                  <option>Camarógrafo</option>
-                  <option>Director</option>
-                  <option>Editor</option>
-                </select>
-              </div>
-              <div className="flex flex-col">
-                <label className="text-black font-bold mb-1 text-pink-600">Instagram (URL)</label>
-                <input type="text" placeholder="instagram.com/tu_usuario" className="input-estilo" onChange={(e) => setInstagram(e.target.value)} />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-black font-bold mb-1 text-blue-700">Facebook (URL)</label>
-                <input type="text" placeholder="facebook.com/tu_perfil" className="input-estilo" onChange={(e) => setFacebook(e.target.value)} />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-black font-bold mb-1 text-red-600">YouTube / Reel (URL)</label>
-                <input type="text" placeholder="youtube.com/@tu_canal" className="input-estilo" onChange={(e) => setYoutube(e.target.value)} />
-              </div>
-            </div>
-          </section>
-
-          {/* SECCIÓN 3: EXPERIENCIA */}
-          <section className="space-y-4">
-            <h2 className="text-indigo-700 font-black uppercase text-sm tracking-widest border-b pb-2">Trayectoria</h2>
-            <div className="flex flex-col">
-              <label className="text-black font-bold mb-1">Resumen de Experiencia</label>
-              <textarea placeholder="Trabajos anteriores, formación..." className="input-estilo h-24" onChange={(e) => setExperiencia(e.target.value)} />
-            </div>
-            <div className="flex flex-col">
-              <label className="text-black font-bold mb-1">Habilidades / Equipamiento</label>
-              <input type="text" placeholder="Ej: Inglés fluido, cámara 4K, movilidad propia..." className="input-estilo" onChange={(e) => setHabilidades(e.target.value)} />
-            </div>
-          </section>
-
+          {/* BOTÓN DE GOOGLE */}
           <button 
-            type="submit" 
-            disabled={cargando}
-            className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-700 transition shadow-lg disabled:bg-slate-400 text-lg"
+            onClick={manejarGoogle}
+            className="w-full mb-6 flex items-center justify-center gap-3 bg-white/10 border border-white/20 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-white/20 transition-all"
           >
-            {cargando ? "Registrando..." : "CREAR MI PERFIL PROFESIONAL"}
+            <img src="https://www.gstatic.com/firebase/hub/sdk/impl/auth/light-google.svg" className="w-4 h-4" alt="Google" />
+            Continuar con Google
           </button>
-        </form>
-      </div>
 
-      <style jsx>{`
-        .input-estilo {
-          width: 100%;
-          padding: 0.8rem;
-          border-radius: 0.75rem;
-          border: 2px solid #e2e8f0;
-          background-color: #ffffff;
-          color: #000000;
-          font-size: 1rem;
-          transition: border-color 0.2s;
-        }
-        .input-estilo:focus {
-          border-color: #4f46e5;
-          outline: none;
-        }
-      `}</style>
+          <div className="relative flex items-center mb-6">
+            <div className="flex-grow border-t border-white/10"></div>
+            <span className="flex-shrink mx-4 text-[9px] font-black text-white/30 uppercase">O registra tu email</span>
+            <div className="flex-grow border-t border-white/10"></div>
+          </div>
+
+          <form onSubmit={manejarRegistro} className="space-y-4">
+            <input required placeholder="Nombre Artístico" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-bold outline-none focus:border-indigo-500 transition-all" onChange={(e) => setNombre(e.target.value)} />
+            <input required type="email" placeholder="Email" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-bold outline-none focus:border-indigo-500 transition-all" onChange={(e) => setEmail(e.target.value)} />
+            <input required type="password" placeholder="Contraseña" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-bold outline-none focus:border-indigo-500 transition-all" onChange={(e) => setPassword(e.target.value)} />
+            <select className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-black outline-none" value={rol} onChange={(e) => setRol(e.target.value)}>
+              <option className="bg-[#111]">Actor/Actriz</option>
+              <option className="bg-[#111]">Guionista</option>
+              <option className="bg-[#111]">Director</option>
+            </select>
+            <button disabled={cargando} type="submit" className="w-full bg-white text-black font-black py-4 rounded-xl hover:bg-indigo-500 hover:text-white uppercase text-xs tracking-widest transition-all">
+              {cargando ? "..." : "Registrarme"}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
